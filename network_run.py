@@ -1,11 +1,11 @@
 ##################################################################################
+# Base Model:
 # network_run.py -- Uses the simulator from network_simulator.py
 # and runs a simulation of a plastic recurrent network as in:
-#
 # Ref: Sadeh, Clopath and Rotter (PLOS Computational Biology, 2015).
 # Emergence of Functional Specificity in Balanced Networks with Synaptic Plasticity.
 #
-# Author: Sadra Sadeh <s.sadeh@ucl.ac.uk> // Created: 2014-2015
+# Author: Devashri + add names as you write code (CAMP 2026, group 7 )
 ##################################################################################
 
 import numpy as np
@@ -42,7 +42,7 @@ x_ap = np.copy(x_bp)
 y0 = np.zeros((1,n)) 
 
 y_bp, s_bp, ym_plst_bp, yp_plst_bp, y_avg_bp, Wf_bp = \
-        NS._net_sim_(A = A, y0 = y0, x = x_bp, vth = vth, W0 = W0, synapse='static')
+        NS.simulate_network(A = A, y0 = y0, x = x_bp, vth = vth, W0 = W0, synapse='static')
 
 spk_bp = np.where(s_bp[0:n,:] != 0)
 
@@ -74,7 +74,7 @@ for blk in range(block_no):
     y0 = np.zeros((1,n)) 
 
     y, s_wp, ym_plst, yp_plst, y_avg, W_blk = \
-       NS._net_sim_(A = A, y0 = y0, x = x_wp, vth = vth, W0 = W_blk, synapse='plastic')
+       NS.simulate_network(A = A, y0 = y0, x = x_wp, vth = vth, W0 = W_blk, synapse='plastic')
     spk_wp = np.where(s_wp[0:n,:] != 0)
     spk_wp_tot.append(spk_wp)
     W_blk_tot.append(W_blk)
@@ -91,7 +91,7 @@ print('### after plasticity')
 y0 = np.zeros((1,n)) 
 
 y_ap, s_ap, ym_plst_ap, yp_plst_ap, y_avg_ap, Wf_ap = \
-        NS._net_sim_(A = A, y0 = y0, x = x_ap, vth = vth, W0 = Wf, synapse='static')
+        NS.simulate_network(A = A, y0 = y0, x = x_ap, vth = vth, W0 = Wf, synapse='static')
 
 spk_ap = np.where(s_ap[0:n,:] != 0)
 
@@ -129,7 +129,7 @@ if spont_act:
         y0 = np.zeros((1,n)) 
 
         y, s_sp, ym_plst, yp_plst, y_avg, W_sp = \
-           NS._net_sim_(A = A, y0 = y0, x = x_wp, vth = vth, W0 = W_sp, synapse='plastic', inh_ltd=1)
+           NS.simulate_network(A = A, y0 = y0, x = x_wp, vth = vth, W0 = W_sp, synapse='plastic', inh_ltd=1)
         spk_sp = np.where(s_sp[0:n,:] != 0)
         spk_sp_tot.append(spk_sp)
         W_sp_tot.append(W_sp)
@@ -168,7 +168,7 @@ if card_act:
         y0 = np.zeros((1,n)) 
 
         y, s_cd, ym_plst, yp_plst, y_avg, W_cd = \
-           NS._net_sim_(A = A, y0 = y0, x = x_cd, vth = vth, W0 = W_cd, synapse='plastic')
+           NS.simulate_network(A = A, y0 = y0, x = x_cd, vth = vth, W0 = W_cd, synapse='plastic')
         spk_cd = np.where(s_cd[0:n,:] != 0)
         spk_cd_tot.append(spk_cd)
         W_cd_tot.append(W_cd)
