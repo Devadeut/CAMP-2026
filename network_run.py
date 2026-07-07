@@ -23,7 +23,9 @@ w0_exc = np.concatenate(( J*np.random.binomial(1, P_ee, (ne,ne)), \
 w0_inh = np.concatenate(( -g*J*np.random.binomial(1, P_ie, (ni,ne)), \
                           -g*J*np.random.binomial(1, P_ii, (ni,ni)) ), 1) # (ni, ne+ni)
 W0 = np.concatenate((w0_exc , w0_inh)) # (ne+ni, ne+ni) = (n, n)
-
+# binary connectivity mask: 1 = connection exists, 0 = absent
+C0 = (W0 != 0).astype(float)
+C_blk = C0.copy()
 #################################################################################
 # -- before learning (single rientation th)
 print('### before plasticity')
@@ -36,8 +38,9 @@ bin = int(sim_time_test/dt) # num of time bins
 spike_train_bp = generate_poisson_input([th], T)
 x_ap = np.copy(spike_train_bp)
 v0 = np.zeros((1,n)) # (1, 500) init Vm
-y_bp, s_bp, ym_plst_bp, yp_plst_bp, y_avg_bp, Wf_bp = \
-        simulate_network(A = A, v0 = v0, x = spike_train_bp, vth = vth, W0 = W0, synapse='static')
+# run with current connectivity mask C0
+y_bp, s_bp, ym_plst_bp, yp_plst_bp, y_avg_bp, Wf_bp, C_bp = \
+    simulate_network(A = A, v0 = v0, x = spike_train_bp, vth = vth, W0 = W0, C0=C0, synapse='static')
 spike_times_bp = np.where(s_bp[0:n,:] != 0)
 
 
@@ -48,6 +51,10 @@ print('### within plasticity')
 W_blk = W0
 spike_times_wp = []
 W_blk_tot = []
+C_blk_tot = []
+pruned_counts = []
+grown_counts = []
+total_conn_counts = []
 stim_rng_tot = []
 
 for epoch in range(block_no):
@@ -56,12 +63,64 @@ for epoch in range(block_no):
     stim_rng_tot.append(stim_rng)
     spike_train_wp = generate_poisson_input(stim_rng, T)
     v0 = np.zeros((1,n)) 
-    y, s_wp, ym_plst, yp_plst, y_avg, W_blk = \
-       simulate_network(A = A, v0 = v0, x = spike_train_wp, vth = vth, W0 = W_blk, synapse='plastic')
+    # pass current connectivity mask C_blk into the simulator and receive updated mask back
+    y, s_wp, ym_plst, yp_plst, y_avg, W_blk, C_blk = \
+       simulate_network(A = A, v0 = v0, x = spike_train_wp, vth = vth, W0 = W_blk, C0=C_blk, synapse='plastic')
     st = np.where(s_wp[0:n,:] != 0)
     spike_times_wp.append(st)
     W_blk_tot.append(W_blk)
+    C_blk_tot.append(C_blk.copy())
 
+    # --- structural plasticity: prune weak E->E and probabilistically grow new E->E
+    if sp_structural:
+        # calcium/activity proxy: average y_avg over the batch (per neuron)
+        ca = np.mean(y_avg, axis=1)
+
+        # pruning: remove weak existing excitatory connections
+        prune_mask = (W_blk[0:ne, 0:ne] < prune_thresh) & (C_blk[0:ne, 0:ne] == 1)
+        num_pruned = 0
+        if np.any(prune_mask):
+            num_pruned = int(np.sum(prune_mask))
+            C_blk[0:ne, 0:ne][prune_mask] = 0.0
+            W_blk[0:ne, 0:ne][prune_mask] = 0.0
+
+        # growth: consider absent E->E synapses and grow based on presynaptic activity
+        absent_rows, absent_cols = np.where(C_blk[0:ne, 0:ne] == 0)
+        if len(absent_rows) > 0:
+            # growth probability per candidate depends on presynaptic activity (col index)
+            def _sig(x):
+                return 1.0 / (1.0 + np.exp(-grow_sig_slope * x))
+
+            p_grow = p_sp * _sig(ca[absent_cols] - theta_grow)
+            rand_vals = np.random.rand(len(p_grow))
+            grow_idx = np.where(rand_vals < p_grow)[0]
+            if len(grow_idx) > 0:
+                rows = absent_rows[grow_idx]
+                cols = absent_cols[grow_idx]
+                # avoid self-connections
+                keep = rows != cols
+                rows = rows[keep]
+                cols = cols[keep]
+                C_blk[rows, cols] = 1.0
+                W_blk[rows, cols] = grow_seed
+                num_grown = int(len(rows))
+            else:
+                num_grown = 0
+        else:
+            num_grown = 0
+
+        # report structural changes this epoch
+        total_conn = int(np.sum(C_blk[0:ne, 0:ne]))
+        pruned_counts.append(num_pruned)
+        grown_counts.append(num_grown)
+        total_conn_counts.append(total_conn)
+        print(f"Epoch {epoch}: pruned={num_pruned}, grown={num_grown}, E->E total={total_conn}")
+    else:
+        # structural plasticity disabled
+        pruned_counts.append(0)
+        grown_counts.append(0)
+        total_conn_counts.append(int(np.sum(C_blk[0:ne, 0:ne])))
+        print(f"Epoch {epoch}: structural plasticity disabled")
 Wf = W_blk
 
 #################################################################################
@@ -69,8 +128,9 @@ Wf = W_blk
 print('### after plasticity')
 
 v0 = np.zeros((1,n)) 
-y_ap, s_ap, ym_plst_ap, yp_plst_ap, y_avg_ap, Wf_ap = \
-        simulate_network(A = A, v0 = v0, x = x_ap, vth = vth, W0 = Wf, synapse='static')
+# test using final connectivity mask
+y_ap, s_ap, ym_plst_ap, yp_plst_ap, y_avg_ap, Wf_ap, C_final = \
+    simulate_network(A = A, v0 = v0, x = x_ap, vth = vth, W0 = Wf, C0=C_blk, synapse='static')
 spike_times_ap = np.where(s_ap[0:n,:] != 0)
 
 
@@ -158,11 +218,16 @@ res_save = 1
 if res_save:
     results = {}
     results['W0'] = W0
+    results['C0'] = C0
 
     results['spike_times_bp'] = spike_times_bp
     results['spike_times_wp'] = spike_times_wp
     results['spike_times_ap'] = spike_times_ap
     results['W_blk_tot'] = W_blk_tot
+    results['C_blk_tot'] = C_blk_tot
+    results['pruned_counts'] = pruned_counts
+    results['grown_counts'] = grown_counts
+    results['total_conn_counts'] = total_conn_counts
     results['stim_rng_tot'] = stim_rng_tot
     
     if spont_act:

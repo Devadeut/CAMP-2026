@@ -112,32 +112,31 @@ class STDP:
         t0 = max(t - window, 0)
         return np.mean(V[:, t0:t], axis=1) # average mem potential
 
-    def update_weights(self, W, V, spikes, yd_trace, yp_trace, x_trace, avg_Vm):
-        # depression term
+    def update_weights(self, W, V, spikes, yd_trace, yp_trace, x_trace, avg_Vm, C):
+        # compute depression and potentiation terms
         dw_d = -dt * np.outer(spikes, (A_ltd * avg_Vm**2 / 70.0) * _rect_(yd_trace - vth_m))
-        # potentiation term
         dw_p = dt * A_ltp * np.outer(x_trace, _rect_(V - vth_p) * _rect_(yp_trace - vth_m))
 
-        # exc to all
-        W[0:ne, 0:n] = (W[0:ne, 0:n] + (dw_d[0:ne, 0:n] + dw_p[0:ne, 0:n]) * (W[0:ne, 0:n] != 0))
-            # bounds
-        W[0:ne] = (W[0:ne] >= w_max) * w_max + (W[0:ne] < w_max ) * W[0:ne] 
+        # gate excitatory updates by connectivity mask C (only update existing synapses)
+        W[0:ne, 0:n] = W[0:ne, 0:n] + (dw_d[0:ne, 0:n] + dw_p[0:ne, 0:n]) * C[0:ne, 0:n]
+
+        # bounds for excitatory weights
+        W[0:ne] = (W[0:ne] >= w_max) * w_max + (W[0:ne] < w_max ) * W[0:ne]
         W[0:ne] *= W[0:ne] > 0
 
-        # inh to exc
+        # inhibitory block (unchanged behavior)
         W[ne:, 0:ne] = (W[ne:, 0:ne] - dw_p[ne:, 0:ne] - dw_d[ne:, 0:ne])
-            # bounds
         W[ne:] = (W[ne:] <= w_max_inh) * w_max_inh + (W[ne:] > w_max_inh) * W[ne:]
         W[ne:] *= W[ne:] <= 0
 
         return W
 
 
-def simulate_network(A, v0, x, vth, W0, synapse='static'):
+def simulate_network(A, v0, x, vth, W0, C0 = None, synapse='static'):
     inputs = np.asarray(x)
     V0 = np.asarray(v0).reshape(-1)
     W = np.copy(W0)
-
+    C = np.copy(C0) if C0 is not None else np.ones_like(W)
     V = np.zeros(inputs.shape)
     spikes = np.zeros(inputs.shape)
     yd_plst = np.zeros(inputs.shape)
@@ -156,7 +155,7 @@ def simulate_network(A, v0, x, vth, W0, synapse='static'):
         else:
             pre_Vm = V[:, t - 1]
             pre_spikes = spikes[:, t - 1]
-            I_syn = pre_spikes @ W
+            I_syn = pre_spikes @ (W * C) # synaptic current from recurrent connections for connections that do exist given by C
             yd_trace, yp_trace, x_trace = stdp.update_traces(yd_plst[:, t - 1], yp_plst[:, t - 1], x_plst[:, t - 1], pre_Vm, pre_spikes)
 
         V[:, t], spikes[:, t] = neuron.step(pre_Vm, inputs[:, t], I_syn)
@@ -164,9 +163,9 @@ def simulate_network(A, v0, x, vth, W0, synapse='static'):
 
         if synapse == 'plastic':
             y_avg[:, t] = stdp.running_avg_Vm(V,t)
-            W = stdp.update_weights(W, V[:, t], spikes[:, t], yd_trace, yp_trace, x_trace, y_avg[:, t])
+            W = stdp.update_weights(W, V[:, t], spikes[:, t], yd_trace, yp_trace, x_trace, y_avg[:, t], C)
 
-    return V, spikes, yd_plst, yp_plst, y_avg, W
+    return V, spikes, yd_plst, yp_plst, y_avg, W, C
 
 
 
