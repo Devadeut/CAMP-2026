@@ -18,10 +18,10 @@ block_no = 40 # number of batches for learning
 stim_no = 20. # number of stimuli with different orientations in each batch
 
 trial_time = .1 * 1000 # presentation time of each orientation (ms)
-sim_time = stim_no * trial_time # total simulation time for each batch (ms)
+T = stim_no * trial_time # total simulation time for each batch (ms)
 dt = 1  # time resolution (ms)
-x_len = int(sim_time/dt)
-t = np.arange(0, sim_time, dt)
+bins = int(T/dt)     # NUM OF TIME BINS?
+t = np.arange(0, T, dt)
 
 # -- network params
 n = 500 # total number of neurons
@@ -30,10 +30,10 @@ ne = int(f*n) # number of exc neurons
 ni = n - ne   # number of inh neurons
 
 # connection probability
-eps_ee = .3 # exc to exc
-eps_ei = .3 # exc to inh
-eps_ie = 1. # inh to exc
-eps_ii = 1. # inh to inh
+P_ee = .3 # exc to exc
+P_ei = .3 # exc to inh
+P_ie = 1. # inh to exc
+P_ii = 1. # inh to inh
 
 J = .5 # EPSP (mV)
 g = 8. # inhibition dominance ratio (IPSP = -g EPSP)

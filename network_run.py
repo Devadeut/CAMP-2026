@@ -9,91 +9,69 @@
 ##################################################################################
 
 import numpy as np
-import pylab as pl
+import matplotlib.pyplot as pl
 import pickle 
 from importlib import reload # Python 3 compatibility
 import params; reload(params); from params import *
-import network_simulator as NS
+from network_simulator import simulate_network, generate_poisson_input
 
 #################################################################################
-# -- generating the weight matrix
-w0_exc = np.concatenate(( J*np.random.binomial(1, eps_ee, (ne,ne)), \
-                          J*np.random.binomial(1, eps_ei, (ne,ni)) ), 1)
-w0_inh = np.concatenate(( -g*J*np.random.binomial(1, eps_ie, (ni,ne)), \
-                          -g*J*np.random.binomial(1, eps_ii, (ni,ni)) ), 1)
-W0 = np.concatenate((w0_exc , w0_inh))
+# -- generating the weight matrix | J = 0.5 mV EPSP, ne- num of exc, ni - num of inh
+# binomial distribution with P_xx prob. and size (x, y)
+w0_exc = np.concatenate(( J*np.random.binomial(1, P_ee, (ne,ne)), \
+                          J*np.random.binomial(1, P_ei, (ne,ni)) ), 1)  # (ne, ne+ni)
+w0_inh = np.concatenate(( -g*J*np.random.binomial(1, P_ie, (ni,ne)), \
+                          -g*J*np.random.binomial(1, P_ii, (ni,ni)) ), 1) # (ni, ne+ni)
+W0 = np.concatenate((w0_exc , w0_inh)) # (ne+ni, ne+ni) = (n, n)
 
 #################################################################################
-# -- before learning
+# -- before learning (single rientation th)
 print('### before plasticity')
 
-x_bp = []
-sim_time_test = sim_time
-x_len_test = int(sim_time_test/dt)
-for nn in range(n):
-    if nn < ne: p_rate = b_rate*(1+m_exc*np.cos(2*(th - po_init[nn])))
-    else: p_rate = b_rate*(1+m_inh*np.cos(2*(th - po_init[nn])))
-    rate_ev = np.random.poisson(p_rate*dt/1000., int(x_len_test)).tolist()
-    x_bp.append(rate_ev)
-x_bp = np.array(x_bp)
+spike_train = []
+sim_time_test = T
+bin = int(sim_time_test/dt) # num of time bins
 
-x_ap = np.copy(x_bp)
-
-y0 = np.zeros((1,n)) 
-
+# Input Generation
+spike_train_bp = generate_poisson_input([th], T)
+x_ap = np.copy(spike_train_bp)
+v0 = np.zeros((1,n)) # (1, 500) init Vm
 y_bp, s_bp, ym_plst_bp, yp_plst_bp, y_avg_bp, Wf_bp = \
-        NS.simulate_network(A = A, y0 = y0, x = x_bp, vth = vth, W0 = W0, synapse='static')
-
-spk_bp = np.where(s_bp[0:n,:] != 0)
+        simulate_network(A = A, v0 = v0, x = spike_train_bp, vth = vth, W0 = W0, synapse='static')
+spike_times_bp = np.where(s_bp[0:n,:] != 0)
 
 
 #################################################################################
-# -- during learning
+# -- during learning (Multiple random orientation)
 print('### within plasticity')
 
 W_blk = W0
-spk_wp_tot = []
+spike_times_wp = []
 W_blk_tot = []
 stim_rng_tot = []
-for blk in range(block_no):
-    print(blk)
+
+for epoch in range(block_no):
+    print(epoch)
     stim_rng = np.random.uniform(0, np.pi, int(stim_no))
     stim_rng_tot.append(stim_rng)
-    t_stim = sim_time / len(stim_rng)
-    x_wp = []
-    for nn in range(n):
-        rates = []
-        for st in stim_rng:
-            if nn < ne: p_rate = b_rate*(1+m_exc*np.cos(2*(st - po_init[nn])))
-            else: p_rate = b_rate*(1+m_inh*np.cos(2*(st - po_init[nn])))
-            rates = rates + np.random.poisson(p_rate*dt/1000., int(x_len/len(stim_rng))).tolist()
-        rates = np.array(rates)
-        x_wp.append(rates)
-    x_wp = np.array(x_wp)
-
-    y0 = np.zeros((1,n)) 
-
+    spike_train_wp = generate_poisson_input(stim_rng, T)
+    v0 = np.zeros((1,n)) 
     y, s_wp, ym_plst, yp_plst, y_avg, W_blk = \
-       NS.simulate_network(A = A, y0 = y0, x = x_wp, vth = vth, W0 = W_blk, synapse='plastic')
-    spk_wp = np.where(s_wp[0:n,:] != 0)
-    spk_wp_tot.append(spk_wp)
+       simulate_network(A = A, v0 = v0, x = spike_train_wp, vth = vth, W0 = W_blk, synapse='plastic')
+    st = np.where(s_wp[0:n,:] != 0)
+    spike_times_wp.append(st)
     W_blk_tot.append(W_blk)
-
-stim_rng_tot = np.array(stim_rng_tot)
-W_blk_tot = np.array(W_blk_tot)
 
 Wf = W_blk
 
 #################################################################################
-# -- after learning
+# -- after learning (Testing phase)
 print('### after plasticity')
 
-y0 = np.zeros((1,n)) 
-
+v0 = np.zeros((1,n)) 
 y_ap, s_ap, ym_plst_ap, yp_plst_ap, y_avg_ap, Wf_ap = \
-        NS.simulate_network(A = A, y0 = y0, x = x_ap, vth = vth, W0 = Wf, synapse='static')
-
-spk_ap = np.where(s_ap[0:n,:] != 0)
+        simulate_network(A = A, v0 = v0, x = x_ap, vth = vth, W0 = Wf, synapse='static')
+spike_times_ap = np.where(s_ap[0:n,:] != 0)
 
 
 #################################################################################
@@ -110,26 +88,26 @@ if spont_act:
     W_sp_tot = []
     spk_sp_tot = []
     ## plastic spontaneous
-    for blk in range(block_no_sp):
-        print(blk)
+    for epoch in range(block_no_sp):
+        print(epoch)
         stim_rng = np.arange(1, stim_no+1)
         #stim_rng_tot.append(stim_rng)
-        t_stim = sim_time / len(stim_rng)
-        x_wp = []
+        t_stim = T / len(stim_rng)
+        spike_train_wp = []
         #np.random.seed(1234)
-        for nn in range(n):
+        for i in range(n):
             rates = []
             for st in stim_rng:
                 p_rate = b_rate/2#*st/stim_no
-                rates = rates + np.random.poisson(p_rate*dt/1000., x_len//len(stim_rng)).tolist()
+                rates = rates + np.random.poisson(p_rate*dt/1000., bins//len(stim_rng)).tolist()
             rates = np.array(rates)
-            x_wp.append(rates)
-        x_wp = np.array(x_wp)
+            spike_train_wp.append(rates)
+        spike_train_wp = np.array(spike_train_wp)
 
-        y0 = np.zeros((1,n)) 
+        v0 = np.zeros((1,n)) 
 
         y, s_sp, ym_plst, yp_plst, y_avg, W_sp = \
-           NS.simulate_network(A = A, y0 = y0, x = x_wp, vth = vth, W0 = W_sp, synapse='plastic', inh_ltd=1)
+           simulate_network(A = A, v0 = v0, x = spike_train_wp, vth = vth, W0 = W_sp, synapse='plastic', inh_ltd=1)
         spk_sp = np.where(s_sp[0:n,:] != 0)
         spk_sp_tot.append(spk_sp)
         W_sp_tot.append(W_sp)
@@ -148,27 +126,27 @@ if card_act:
     spk_cd_tot = []
     stim_rng_tot_cd = []
     ## plastic spontaneous
-    for blk in range(block_no_cd):
-        print(blk)
+    for epoch in range(block_no_cd):
+        print(epoch)
         stim_rng = np.concatenate( (np.random.uniform(0, np.pi, int(stim_no/2)), np.ones(int(stim_no/4))*0., np.ones(int(stim_no/4))*np.pi/2) )
         np.random.shuffle(stim_rng)
         stim_rng_tot_cd.append(stim_rng)
-        t_stim = sim_time / len(stim_rng)
+        t_stim = T / len(stim_rng)
         x_cd = []
-        for nn in range(n):
+        for i in range(n):
             rates = []
             for st in stim_rng:
-                if nn < ne: p_rate = b_rate*(1+m_exc*np.cos(2*(st - po_init[nn])))
-                else: p_rate = b_rate*(1+m_inh*np.cos(2*(st - po_init[nn])))
-                rates = rates + np.random.poisson(p_rate*dt/1000., x_len//len(stim_rng)).tolist()
+                if i < ne: p_rate = b_rate*(1+m_exc*np.cos(2*(st - po_init[i])))
+                else: p_rate = b_rate*(1+m_inh*np.cos(2*(st - po_init[i])))
+                rates = rates + np.random.poisson(p_rate*dt/1000., bins//len(stim_rng)).tolist()
             rates = np.array(rates)
             x_cd.append(rates)
         x_cd = np.array(x_cd)
 
-        y0 = np.zeros((1,n)) 
+        v0 = np.zeros((1,n)) 
 
         y, s_cd, ym_plst, yp_plst, y_avg, W_cd = \
-           NS.simulate_network(A = A, y0 = y0, x = x_cd, vth = vth, W0 = W_cd, synapse='plastic')
+           simulate_network(A = A, v0 = v0, x = x_cd, vth = vth, W0 = W_cd, synapse='plastic')
         spk_cd = np.where(s_cd[0:n,:] != 0)
         spk_cd_tot.append(spk_cd)
         W_cd_tot.append(W_cd)
@@ -181,9 +159,9 @@ if res_save:
     results = {}
     results['W0'] = W0
 
-    results['spk_bp'] = spk_bp
-    results['spk_wp_tot'] = spk_wp_tot
-    results['spk_ap'] = spk_ap
+    results['spike_times_bp'] = spike_times_bp
+    results['spike_times_wp'] = spike_times_wp
+    results['spike_times_ap'] = spike_times_ap
     results['W_blk_tot'] = W_blk_tot
     results['stim_rng_tot'] = stim_rng_tot
     

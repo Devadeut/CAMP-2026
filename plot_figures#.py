@@ -5,34 +5,7 @@
 # Ref: Sadeh, Clopath and Rotter (PLOS Computational Biology, 2015).
 # Emergence of Functional Specificity in Balanced Networks with Synaptic Plasticity.
 #
-# Author: Sadra Sadeh <s.sadeh@ucl.ac.uk> // Created: 2014-2015
 #
-# --- Modernization notes (kept here rather than scattered, so the diff against
-#     the original is easy to audit) ---
-# 1. `pylab` is deprecated -> replaced with `matplotlib.pyplot as plt` (+ `matplotlib.cm`
-#    where needed). Every `pl.xxx` call becomes `plt.xxx`; behavior is identical,
-#    pylab was always a thin wrapper around pyplot/numpy.
-# 2. `pl.histogram(...)` does not exist on `pyplot` (pylab used to re-export
-#    `numpy.histogram` under that name) -> replaced with `np.histogram(...)`.
-# 3. `bins=len(sim_time/10)` raised `TypeError: object of type 'float' has no len()`
-#    on every Python/matplotlib version, old or new -- `sim_time/10` is a scalar,
-#    not a sequence. Given the surrounding `range=(0, sim_time)` expects a bin
-#    *count*, this is fixed to `bins=int(sim_time/10)`, which reproduces the
-#    clearly-intended ~10 ms-wide PSTH bins.
-# 4. Four blocks had lost their indentation (looked like a copy/paste or
-#    tabs/spaces mangling) so the file did not parse at all:
-#      - the `if stim == 0: / else:` block in `_temp_plot_`
-#      - the `if yy == 1:` block in `_temp_plot_`
-#      - the `for jj in range(ne):` inner loop
-#      - the whole body of `_plot_alignw_`
-#    These are re-indented to their evident intended nesting; no logic changed.
-# 5. `dw_po` is built as `[]`, never appended to, then wrapped with `np.array(dw_po)`
-#    and never used again. This is dead code in the original script; it is kept
-#    as-is (nothing deleted) since removing it would be a content change, not a
-#    modernization, but it is flagged here in case it was meant to hold something.
-# 6. `from params import *` is a wildcard import; left untouched since `params.py`
-#    was not provided and every name it must supply (ne, ni, n, dt, th, stim_no,
-#    trial_time, block_no, po_init) is still required exactly as before.
 ##################################################################################
 import numpy as np
 import matplotlib.pyplot as plt
@@ -46,9 +19,9 @@ from mpl_toolkits.axes_grid1 import make_axes_locatable
 with open('results', 'rb') as fl:
     results = pickle.load(fl)
 W0 = results['W0']
-spk_bp = results['spk_bp']
-spk_wp_tot = results['spk_wp_tot']
-spk_ap = results['spk_ap']
+spk_bp = results['spike_times_bp']
+spk_wp_tot = results['spike_times_wp']
+spk_ap = results['spike_times_ap']
 spk_sp_tot = results['spk_sp_tot']
 spk_cd_tot = results['spk_cd_tot']
 W_blk_tot = results['W_blk_tot']
@@ -62,8 +35,8 @@ Wf = W_blk_tot[-1]
 ### Figure 1
 #########
 mksz = 2.
-Ts = sim_time / 1000
-sim_time = int(sim_time)
+Ts = T / 1000
+sim_time = int(T)
 
 
 def _temp_plot_(spk, ax, stim=0, yy=0):

@@ -16,7 +16,7 @@
 # -----------------------
 # - takes as the input:
 # A: coefficient matrix of the subthreshold dynamics (needed for Exact Integration) []
-# y0: vector of initial membrane potential of neurons
+# v0: vector of initial membrane potential of neurons
 # x: sequence of input spike trains for all neurons 
 # W0: initial weight matrix
 # synapse: the type of recurrent synapses (static / plastic)
@@ -38,6 +38,40 @@ from params import *
 def _rect_(xx):
     return xx * (xx > 0)
 
+def generate_poisson_input(stimulus_tetha, T):
+    ''' Poisson generated spike trains
+        Input: 
+        - stimulus_theta: orientation
+        - T: simulation time
+        Returns: spike_train    
+    '''
+    num_stimuli = len(stimulus_tetha)
+    bins_per_stimulus = int(T/num_stimuli)
+    total_bins = int(T)
+
+    # Init input matrix (N_neurons, T_timebins)
+    spike_train = np.zeros((n, total_bins))
+
+    for i in range(n):
+        neuron_spike_train = []
+
+        # For each stimulus angle
+        for theta in stimulus_tetha:
+            # Tuning rate for neuron i
+            # tune component of input modulated using orientation (theta)
+            if i < ne:
+                p_rate = b_rate * (1 + m_exc * np.cos(2 * (theta - po_init[i])))
+            else:
+                p_rate = b_rate * (1 + m_inh * np.cos(2 * (theta - po_init[i])))
+            
+            # Generate the Poisson spikes for the duration of this stimulus
+            lam = p_rate * dt / 1000.0
+            spikes = np.random.poisson(lam, bins_per_stimulus)
+            neuron_spike_train.extend(spikes)
+
+        spike_train[i,:] = neuron_spike_train
+    
+    return spike_train
 
 class LIFNeuron:
     '''Leaky integrate-and-fire neuron population with exact integration.'''
@@ -99,9 +133,9 @@ class STDP:
         return W
 
 
-def simulate_network(A, y0, x, vth, W0, synapse='static'):
+def simulate_network(A, v0, x, vth, W0, synapse='static'):
     inputs = np.asarray(x)
-    V0 = np.asarray(y0).reshape(-1)
+    V0 = np.asarray(v0).reshape(-1)
     W = np.copy(W0)
 
     V = np.zeros(inputs.shape)
