@@ -123,13 +123,26 @@ mean_rate = all_rates.mean(axis=0, keepdims=True)
 centered = all_rates - mean_rate
 
 # PCA via SVD -- avoids an sklearn dependency
-U, S, Vt = np.linalg.svd(centered, full_matrices=False)
-n_components = 3
-components = Vt[:n_components]                        # (3, n_neurons)
-explained_var = (S**2 / np.sum(S**2))[:n_components]
-print('Variance explained by PC1-3:', np.round(explained_var, 3),
-      '(cumulative: %.1f%%)' % (100 * explained_var.sum()))
+# U, S, Vt = np.linalg.svd(centered, full_matrices=False)
+# n_components = 3
+# components = Vt[:n_components]                        # (3, n_neurons)
+# explained_var = (S**2 / np.sum(S**2))[:n_components]
+# print('Variance explained by PC1-3:', np.round(explained_var, 3),
+#       '(cumulative: %.1f%%)' % (100 * explained_var.sum()))
 
+# use sklearn to try that as well
+    
+from sklearn.decomposition import PCA
+
+pca = PCA(n_components=3)
+pca.fit(centered)
+components_sklearn = pca.components_
+explained_var_sklearn = pca.explained_variance_ratio_
+print('Variance explained by PC1-3 (sklearn):', np.round(explained_var_sklearn, 3),
+      '(cumulative: %.1f%%)' % (100 * explained_var_sklearn.sum()))
+
+# ensure downstream code uses the sklearn components variable
+components = components_sklearn
 
 def project(rate_matrix):
     return (rate_matrix - mean_rate) @ components.T    # (T_bins, 3)
