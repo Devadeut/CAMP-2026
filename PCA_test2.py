@@ -10,7 +10,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D  # noqa: F401 (registers the 3d projection)
 import pickle
-from network_run import W0
+import os
 import params; from params import *
 from network_simulator import simulate_network
 n_neurons = n
@@ -21,23 +21,13 @@ T_bins = int(T)
 # Generate spontaneous activity for baseline padding
 # ---------------------------------------------------------------------------
 
-baseline_ms = 100
+baseline_ms = 2000
 baseline_bins = int(baseline_ms / dt)
 
 bins = int(T / dt)
 
-# Constant untuned Poisson input
-spike_train_sp = np.random.poisson(
-    b_rate * dt / 1000.,
-    size=(n_neurons, bins)
-)
-
 v0 = np.zeros((1, n_neurons))
 
-
-
-# Use the LAST 100 ms of spontaneous activity
-baseline_raster = s_sp[:, -baseline_bins:]
 
 # ---------------------------------------------------------------------------
 # 1. Load results
@@ -52,15 +42,6 @@ spk_ap = results['spike_times_ap']          # after plasticity
 n_neurons = n                                # from params.py
 T_bins = int(T)                              # time bins per batch/trial (dt=1ms)
 w0 = results['W0']
-y_sp, s_sp, ym_sp, yp_sp, y_avg_sp, W_sp = simulate_network(
-    A=A,
-    v0=v0,
-    x=spike_train_sp,
-    vth=vth,
-    W0=w0,
-    synapse='static'
-)
-
 # ---------------------------------------------------------------------------
 # 2. Helpers: sparse (neuron_idx, time_idx) spike tuples -> smoothed rate matrix
 # ---------------------------------------------------------------------------
@@ -71,6 +52,26 @@ def spikes_to_raster(spike_times, n_neurons, T_bins):
     valid = time_idx < T_bins
     raster[neuron_idx[valid], time_idx[valid]] = 1
     return raster
+
+# ---------------------------------------------------------------------------
+# Build baseline_raster: prefer saved spontaneous activity from `results` if
+# available (results['spk_sp_tot']), otherwise generate once and save to file.
+# ---------------------------------------------------------------------------
+baseline_file = 'baseline_raster.npy'
+if 'spk_sp_tot' in results and len(results['spk_sp_tot']) > 0:
+    # use first spontaneous block from results (tuple of arrays)
+    spk_sp = results['spk_sp_tot'][0]
+    raster_sp = spikes_to_raster(spk_sp, n_neurons, T_bins)
+    baseline_raster = raster_sp[:, -baseline_bins:]
+elif os.path.exists(baseline_file):
+    baseline_raster = np.load(baseline_file)
+else:
+    # generate and run once, save
+    spike_train_sp = np.random.poisson(b_rate * dt / 1000., size=(n_neurons, bins))
+    y_sp, s_sp, ym_sp, yp_sp, y_avg_sp, W_sp, C_sp = simulate_network(
+        A=A, v0=v0, x=spike_train_sp, vth=vth, W0=w0, C0=None, synapse='static')
+    baseline_raster = s_sp[:, -baseline_bins:]
+    np.save(baseline_file, baseline_raster)
 
 
 def gaussian_kernel(sigma_ms, dt_=1):
