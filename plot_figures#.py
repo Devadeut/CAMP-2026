@@ -245,3 +245,28 @@ plt.subplots_adjust(left=.05, right=.97, bottom=.15, top=.925, wspace=.45)
 plt.savefig('Fig3B')
 plt.show()
 # ----------
+
+# plot to show the numbe rof synapses pruned and grown over time and total number of connections over time
+pruned_counts = results['pruned_counts']
+grown_counts = results['grown_counts']
+total_conn_counts = results['total_conn_counts']
+plt.figure(figsize=(14, 5))
+plt.subplot(131)
+plt.title('Number of Synapses Pruned')
+plt.plot(pruned_counts, 'k', lw=2)
+plt.xlabel('Block #')
+plt.ylabel('Number of Synapses Pruned')
+plt.subplot(132)
+plt.title('Number of Synapses Grown')
+plt.plot(grown_counts, 'k', lw=2)
+plt.xlabel('Block #')
+plt.ylabel('Number of Synapses Grown')
+plt.subplot(133)
+plt.title('Total Number of Connections')
+plt.plot(total_conn_counts, 'k', lw=2)
+plt.xlabel('Block #')
+plt.ylabel('Total Number of Connections')
+plt.tight_layout()
+plt.savefig('Fig-structural-plasticity')
+plt.show()
+

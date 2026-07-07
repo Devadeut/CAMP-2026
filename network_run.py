@@ -87,11 +87,12 @@ for epoch in range(block_no):
         # growth: consider absent E->E synapses and grow based on presynaptic activity
         absent_rows, absent_cols = np.where(C_blk[0:ne, 0:ne] == 0)
         if len(absent_rows) > 0:
-            # growth probability per candidate depends on presynaptic activity (col index)
+            # growth probability per candidate depends on presynaptic activity (row index)
+            # row index = presynaptic neuron, column index = postsynaptic neuron
             def _sig(x):
                 return 1.0 / (1.0 + np.exp(-grow_sig_slope * x))
 
-            p_grow = p_sp * _sig(ca[absent_cols] - theta_grow)
+            p_grow = p_sp * _sig(ca[absent_rows] - theta_grow)
             rand_vals = np.random.rand(len(p_grow))
             grow_idx = np.where(rand_vals < p_grow)[0]
             if len(grow_idx) > 0:
@@ -102,7 +103,8 @@ for epoch in range(block_no):
                 rows = rows[keep]
                 cols = cols[keep]
                 C_blk[rows, cols] = 1.0
-                W_blk[rows, cols] = grow_seed
+                # assign initial excitatory weight same as initial network (J)
+                W_blk[rows, cols] = J
                 num_grown = int(len(rows))
             else:
                 num_grown = 0

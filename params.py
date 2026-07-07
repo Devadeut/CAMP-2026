@@ -79,8 +79,8 @@ vth_p = 7.5 # (mV)
 # add structural plasticity params
 # Structural plasticity
 sp_structural = True    # master on/off
-prune_thresh = 0.02     # prune if weight < this (for E->E) # change this later to a parameter to fine-tune
-grow_seed = 0.01        # seed weight for grown synapse
+prune_thresh = 0.2     # prune if weight < this (for E->E) # change this later to a parameter to fine-tune
+grow_seed = 0.        # seed weight for grown synapse
 p_sp = 0.01             # base growth probability
 theta_grow = 0.5        # calcium/activity threshold for growth (tune)
 grow_sig_slope = 10.0   # steepness of sigmoid used for growth probability
